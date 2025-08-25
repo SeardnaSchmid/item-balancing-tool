@@ -181,7 +181,7 @@ with tab1:
                 st.metric("Avg Cost", f"{df['calculated_cost'].mean():.0f}")
             
             # Max cost indicator
-            st.info(f"💰 **Max Cost Value:** {st.session_state['cost_max_value']:,} - Formula: (success × efficiency / 10000) × max_cost")
+            st.info(f"💰 **Cost-Formula: (success × efficiency × {st.session_state['cost_max_value']})")
         else:
             st.info("No items to visualize yet. Add your first item using the form on the right!")
 
