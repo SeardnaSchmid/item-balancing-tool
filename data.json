@@ -1,0 +1,38 @@
+[
+  {
+    "item_name": "Power Sword",
+    "success_rate": 85.0,
+    "efficiency": 90.0,
+    "calculated_cost": 76500.0,
+    "metals_alloys": 40.0,
+    "synthetic_materials": 20.0,
+    "tech_components": 30.0,
+    "energy_sources": 5.0,
+    "biomatter": 0.0,
+    "chemicals": 5.0
+  },
+  {
+    "item_name": "Healing Potion",
+    "success_rate": 95.0,
+    "efficiency": 60.0,
+    "calculated_cost": 56999.99999999999,
+    "metals_alloys": 5.0,
+    "synthetic_materials": 10.0,
+    "tech_components": 5.0,
+    "energy_sources": 10.0,
+    "biomatter": 50.0,
+    "chemicals": 20.0
+  },
+  {
+    "item_name": "no-name-440e900b-0386-4c9c-be8c-e708a111ab87",
+    "success_rate": 50.0,
+    "efficiency": 50.0,
+    "calculated_cost": 25000.0,
+    "metals_alloys": 100.0,
+    "synthetic_materials": 0.0,
+    "tech_components": 0.0,
+    "energy_sources": 0.0,
+    "biomatter": 0.0,
+    "chemicals": 0.0
+  }
+]

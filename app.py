@@ -3,38 +3,81 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 import uuid
+import json
+from pathlib import Path
 
 st.set_page_config(page_title="Item Balancing Tool", layout="wide")
 st.title("🎮 Item Balancing Tool")
 
-# Initialize session state
+# Data file (local to this source file)
+DATA_FILE = Path(__file__).parent / "data.json"
+
+
+def load_data_file(path: Path):
+    """Try to load items from a JSON file.
+
+    Accepts either a top-level list of item dicts or an object with an "items" key.
+    Returns list on success, or None on failure.
+    """
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        # Accept both list-of-dicts and { "items": [...] }
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
+            return data["items"]
+        # Unexpected format
+        st.warning(f"{path.name} exists but has unexpected JSON structure; expected a list or {{'items': [...]}}")
+        return None
+    except Exception as e:
+        st.warning(f"Failed to read {path.name}: {e}")
+        return None
+
+
+def save_data_file(path: Path, items):
+    try:
+        with path.open("w", encoding="utf-8") as fh:
+            json.dump(items, fh, indent=2, ensure_ascii=False)
+        st.success(f"Saved {len(items)} items to {path}")
+    except Exception as e:
+        st.error(f"Failed to save data to {path}: {e}")
+
+
+# Initialize session state (try loading from data.json first)
 if "items" not in st.session_state:
-    st.session_state["items"] = [
-        {
-            "item_name": "Power Sword",
-            "success_rate": 85.0,
-            "efficiency": 90.0,
-            "calculated_cost": 76500,  # Will be recalculated
-            "metals_alloys": 40.0,
-            "synthetic_materials": 20.0,
-            "tech_components": 30.0,
-            "energy_sources": 5.0,
-            "biomatter": 0.0,
-            "chemicals": 5.0
-        },
-        {
-            "item_name": "Healing Potion",
-            "success_rate": 95.0,
-            "efficiency": 60.0,
-            "calculated_cost": 57000,  # Will be recalculated
-            "metals_alloys": 5.0,
-            "synthetic_materials": 10.0,
-            "tech_components": 5.0,
-            "energy_sources": 10.0,
-            "biomatter": 50.0,
-            "chemicals": 20.0
-        }
-    ]
+    loaded = load_data_file(DATA_FILE)
+    if loaded is not None:
+        st.session_state["items"] = loaded
+    else:
+        st.session_state["items"] = [
+            {
+                "item_name": "Power Sword",
+                "success_rate": 85.0,
+                "efficiency": 90.0,
+                "calculated_cost": 76500,  # Will be recalculated
+                "metals_alloys": 40.0,
+                "synthetic_materials": 20.0,
+                "tech_components": 30.0,
+                "energy_sources": 5.0,
+                "biomatter": 0.0,
+                "chemicals": 5.0
+            },
+            {
+                "item_name": "Healing Potion",
+                "success_rate": 95.0,
+                "efficiency": 60.0,
+                "calculated_cost": 57000,  # Will be recalculated
+                "metals_alloys": 5.0,
+                "synthetic_materials": 10.0,
+                "tech_components": 5.0,
+                "energy_sources": 10.0,
+                "biomatter": 50.0,
+                "chemicals": 20.0
+            }
+        ]
 
 # Initialize max cost value if not exists
 if "cost_max_value" not in st.session_state:
@@ -441,6 +484,53 @@ st.sidebar.markdown("### 📁 Data Management")
 if st.sidebar.button("Clear All Items"):
     st.session_state["items"] = []
     st.rerun()
+
+# Load / Save controls
+st.sidebar.markdown("*Local data operations (reads/writes to data.json in app folder)*")
+if st.sidebar.button("Load data.json"):
+    loaded = load_data_file(DATA_FILE)
+    if loaded is not None:
+        st.session_state["items"] = loaded
+        st.success(f"Loaded {len(loaded)} items from {DATA_FILE.name}")
+        st.rerun()
+    else:
+        st.error(f"Failed to load {DATA_FILE.name}")
+
+if st.sidebar.button("Save to data.json"):
+    save_data_file(DATA_FILE, st.session_state.get("items", []))
+
+# Offer downloadable JSON blob as well
+st.sidebar.markdown("---")
+st.sidebar.markdown("#### Export JSON")
+try:
+    json_blob = json.dumps(st.session_state.get("items", []), indent=2, ensure_ascii=False)
+    st.sidebar.download_button("Download items.json", data=json_blob, file_name="items.json", mime="application/json")
+except Exception:
+    # download_button may fail in some environments; ignore
+    pass
+
+# Import external JSON file (uploaded by user)
+st.sidebar.markdown("---")
+st.sidebar.markdown("#### Import JSON File")
+uploaded = st.sidebar.file_uploader("Choose a JSON file to import", type=["json"], key="uploader")
+if uploaded is not None:
+    try:
+        # uploaded is a BytesIO-like object
+        data = json.load(uploaded)
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
+            items = data["items"]
+        else:
+            st.error("Uploaded JSON must be an array of items or an object with an 'items' list")
+            items = None
+
+        if items is not None:
+            st.session_state["items"] = items
+            st.success(f"Imported {len(items)} items from uploaded file")
+            st.rerun()
+    except Exception as e:
+        st.error(f"Failed to parse uploaded JSON: {e}")
 
 # Show current item count
 if st.session_state["items"]:
