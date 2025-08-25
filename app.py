@@ -120,6 +120,40 @@ def calculate_cost(success_rate, efficiency, cost_max):
 for item in st.session_state["items"]:
     item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], st.session_state["cost_max_value"])
 
+# Generate resource costs based on total cost and resource distribution
+def calculate_resource_costs(items):
+    """Calculate the cost of each resource type based on item's total cost and resource distribution."""
+    resource_fields = [
+        "metals_alloys", "synthetic_materials", "tech_components", 
+        "energy_sources", "biomatter", "chemicals"
+    ]
+    
+    resource_costs = []
+    for item in items:
+        item_resource_costs = {
+            "item_name": item["item_name"],
+            "category": item.get("category", ""),
+            "calculated_cost": item["calculated_cost"]
+        }
+        
+        total_resource_percentage = sum(item.get(field, 0) for field in resource_fields)
+        
+        # Avoid division by zero
+        if total_resource_percentage > 0:
+            for field in resource_fields:
+                percentage = item.get(field, 0)
+                # Calculate the cost for this resource
+                cost = (percentage / total_resource_percentage) * item["calculated_cost"]
+                item_resource_costs[f"{field}_cost"] = cost
+        else:
+            # If no resources specified, set all costs to 0
+            for field in resource_fields:
+                item_resource_costs[f"{field}_cost"] = 0
+                
+        resource_costs.append(item_resource_costs)
+    
+    return resource_costs
+
 # Create tabs
 tab1, tab2, tab3 = st.tabs(["📊 Data Input", "⚖️ Balance Analysis", "📈 Advanced Metrics"])
 
@@ -153,6 +187,22 @@ new_cost_max = st.sidebar.number_input(
     help="Maximum cost when success_rate and efficiency are both 100% (cost = (s × e / 10000) × max_cost)."
 )
 
+# Display options
+st.sidebar.markdown("### 📊 Display Options")
+
+# Initialize in session state if not exists
+if "show_resource_costs" not in st.session_state:
+    st.session_state["show_resource_costs"] = False
+
+show_resource_costs = st.sidebar.checkbox(
+    "Show Resource Costs",
+    value=st.session_state["show_resource_costs"],
+    help="When enabled, shows the calculated cost for each resource type based on the total item cost."
+)
+
+# Update session state with current checkbox value
+st.session_state["show_resource_costs"] = show_resource_costs
+
 # Update max cost if changed
 if new_cost_max != st.session_state["cost_max_value"]:
     st.session_state["cost_max_value"] = new_cost_max
@@ -168,9 +218,8 @@ with tab1:
     st.subheader("📋 Current Items Table")
     if st.session_state["items"]:
         df = pd.DataFrame(filtered_items)
-        # Use a fixed number of rows to prevent the data editor from showing
-        # an extra blank row that can be clicked to add items. This keeps
-        # editing enabled for existing rows but disables adding via the UI.
+        
+        # Standard data editor view (always shown)
         edited_df = st.data_editor(
             df,
             use_container_width=True,
@@ -192,10 +241,64 @@ with tab1:
             column_order=None,  # Show all columns
             hide_index=True
         )
-        # Enable sorting for all columns
-        # Users can click column headers to sort
-
-                # Update costs if data was edited
+        
+        # Display resource costs table if toggle is enabled
+        if show_resource_costs:
+            st.subheader("💰 Resource Costs Breakdown")
+            resource_costs = calculate_resource_costs(filtered_items)
+            cost_df = pd.DataFrame(resource_costs)
+            
+            # Format column names for better display
+            column_config = {
+                "item_name": st.column_config.TextColumn("Item Name", width="medium"),
+                "category": st.column_config.TextColumn("Category"),
+                "calculated_cost": st.column_config.NumberColumn("Total Cost", format="%.0f"),
+                "metals_alloys_cost": st.column_config.NumberColumn("Metals & Alloys Cost", format="%.0f"),
+                "synthetic_materials_cost": st.column_config.NumberColumn("Synthetic Materials Cost", format="%.0f"),
+                "tech_components_cost": st.column_config.NumberColumn("Tech Components Cost", format="%.0f"),
+                "energy_sources_cost": st.column_config.NumberColumn("Energy Sources Cost", format="%.0f"),
+                "biomatter_cost": st.column_config.NumberColumn("Biomatter Cost", format="%.0f"),
+                "chemicals_cost": st.column_config.NumberColumn("Chemicals Cost", format="%.0f")
+            }
+            
+            st.dataframe(
+                cost_df,
+                use_container_width=True,
+                column_config=column_config,
+                hide_index=True
+            )
+            
+            # Add a summary of total resource costs
+            if not cost_df.empty:
+                st.subheader("Resource Cost Summary")
+                total_costs = cost_df.drop(["item_name", "category", "calculated_cost"], axis=1).sum()
+                
+                # Create bar chart of total resource costs
+                resource_names = [
+                    "Metals & Alloys", "Synthetic Materials", "Tech Components",
+                    "Energy Sources", "Biomatter", "Chemicals"
+                ]
+                cost_fields = [
+                    "metals_alloys_cost", "synthetic_materials_cost", "tech_components_cost",
+                    "energy_sources_cost", "biomatter_cost", "chemicals_cost"
+                ]
+                
+                fig = go.Figure(data=[
+                    go.Bar(
+                        x=resource_names,
+                        y=[total_costs[field] for field in cost_fields],
+                        marker_color=['#5A9BD5', '#7AC36A', '#FAA75B', '#CE9ECB', '#D97C7C', '#9E9E9E']
+                    )
+                ])
+                fig.update_layout(
+                    title='Total Cost by Resource Type',
+                    xaxis_title='Resource Type',
+                    yaxis_title='Total Cost',
+                    height=400
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
+        # Update costs if data was edited
         if not edited_df.equals(df):
             updated_items = []
             for _, row in edited_df.iterrows():
