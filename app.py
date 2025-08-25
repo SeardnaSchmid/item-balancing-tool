@@ -137,7 +137,8 @@ with tab1:
                 text=df['item_name'],
                 textposition="top center",
                 marker=dict(
-                    size=df['calculated_cost'] / 2000 + 10,  # Adjusted for new cost range
+                    # Use a fixed marker size so points don't grow/shrink with cost
+                    size=12,
                     color=df['calculated_cost'],
                     colorscale='Viridis',
                     showscale=True,
