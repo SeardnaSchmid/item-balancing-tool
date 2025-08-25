@@ -2,6 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+import uuid
 
 st.set_page_config(page_title="Item Balancing Tool", layout="wide")
 st.title("🎮 Item Balancing Tool")
@@ -35,42 +36,45 @@ if "items" not in st.session_state:
         }
     ]
 
-# Initialize cost multiplier if not exists
-if "cost_multiplier" not in st.session_state:
-    st.session_state["cost_multiplier"] = 1.0
+# Initialize max cost value if not exists
+if "cost_max_value" not in st.session_state:
+    st.session_state["cost_max_value"] = 100000
 
 # Cost calculation function
-def calculate_cost(success_rate, efficiency, cost_multiplier=1.0):
-    """Calculate item cost based on success rate and efficiency"""
-    # Simple formula: (success_rate * efficiency / 10000) * cost_multiplier * 100000
-    base_cost = (success_rate * efficiency) / 10000.0
-    final_cost = base_cost * cost_multiplier * 100000
+def calculate_cost(success_rate, efficiency, cost_max):
+    """Calculate item cost as (success_rate * efficiency / 10000) * cost_max
+
+    success_rate and efficiency are percentages (0-100). The product is divided
+    by 10000 to map 100*100 -> 1.0, then scaled by cost_max.
+    """
+    cost_factor = (success_rate * efficiency) / 10000.0
+    final_cost = cost_factor * cost_max
     return final_cost
 
 # Update costs for existing items
 for item in st.session_state["items"]:
-    item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], st.session_state["cost_multiplier"])
+    item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], st.session_state["cost_max_value"])
 
 # Create tabs
 tab1, tab2, tab3 = st.tabs(["📊 Data Input", "⚖️ Balance Analysis", "📈 Advanced Metrics"])
 
 # Sidebar for global settings
 st.sidebar.markdown("### ⚙️ Global Settings")
-new_cost_multiplier = st.sidebar.slider(
-    "Cost Multiplier", 
-    min_value=0.1, 
-    max_value=10.0, 
-    value=st.session_state["cost_multiplier"], 
-    step=0.1,
-    help="Scale all item costs. Formula: (success_rate × efficiency / 10000) × multiplier × 100000"
+new_cost_max = st.sidebar.number_input(
+    "Maximum Cost Value",
+    min_value=1,
+    max_value=10_000_000,
+    value=st.session_state["cost_max_value"],
+    step=1000,
+    help="Maximum cost when success_rate and efficiency are both 100% (cost = (s × e / 10000) × max_cost)."
 )
 
-# Update cost multiplier if changed
-if new_cost_multiplier != st.session_state["cost_multiplier"]:
-    st.session_state["cost_multiplier"] = new_cost_multiplier
+# Update max cost if changed
+if new_cost_max != st.session_state["cost_max_value"]:
+    st.session_state["cost_max_value"] = new_cost_max
     # Recalculate all item costs
     for item in st.session_state["items"]:
-        item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], st.session_state["cost_multiplier"])
+        item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], st.session_state["cost_max_value"])
     st.rerun()
 
 with tab1:
@@ -108,7 +112,7 @@ with tab1:
         if not edited_df.equals(df):
             updated_items = []
             for _, row in edited_df.iterrows():
-                row['calculated_cost'] = calculate_cost(row['success_rate'], row['efficiency'], st.session_state["cost_multiplier"])
+                row['calculated_cost'] = calculate_cost(row['success_rate'], row['efficiency'], st.session_state["cost_max_value"])
                 updated_items.append(row.to_dict())
             st.session_state["items"] = updated_items
             st.rerun()
@@ -175,8 +179,8 @@ with tab1:
                 st.metric("Avg Efficiency", f"{df['efficiency'].mean():.1f}%")
                 st.metric("Avg Cost", f"{df['calculated_cost'].mean():.0f}")
             
-            # Cost multiplier indicator
-            st.info(f"🎚️ **Cost Multiplier:** {st.session_state['cost_multiplier']:.1f}x - Formula: (success × efficiency / 10000) × multiplier × 100000")
+            # Max cost indicator
+            st.info(f"💰 **Max Cost Value:** {st.session_state['cost_max_value']:,} - Formula: (success × efficiency / 10000) × max_cost")
         else:
             st.info("No items to visualize yet. Add your first item using the form on the right!")
 
@@ -253,12 +257,13 @@ with tab1:
         if abs(resource_sum - 100.0) > 0.1:
             st.warning(f"Resource distribution sums to {resource_sum:.1f}%, should be 100%")
         
-        if st.button("Add Item", use_container_width=True) and new_item_name:
+        if st.button("Add Item", use_container_width=True):
+            # Use UUID if item name is empty
+            item_name = new_item_name if new_item_name else 'no-name-' + str(uuid.uuid4())
             if abs(resource_sum - 100.0) <= 0.1:
-                calculated_cost = calculate_cost(new_success_rate, new_efficiency, st.session_state["cost_multiplier"])
-                
+                calculated_cost = calculate_cost(new_success_rate, new_efficiency, st.session_state["cost_max_value"])
                 new_item = {
-                    "item_name": new_item_name,
+                    "item_name": item_name,
                     "success_rate": new_success_rate,
                     "efficiency": new_efficiency,
                     "calculated_cost": calculated_cost,
@@ -270,7 +275,7 @@ with tab1:
                     "chemicals": new_chemicals
                 }
                 st.session_state["items"].append(new_item)
-                st.success(f"Added {new_item_name}!")
+                st.success(f"Added {item_name}!")
                 st.rerun()
             else:
                 st.error("Resource distribution must sum to 100%")
