@@ -76,6 +76,46 @@ if new_cost_multiplier != st.session_state["cost_multiplier"]:
 with tab1:
     st.header("Item Data Management")
 
+
+    # Current Items Table
+    st.subheader("📋 Current Items Table")
+    if st.session_state["items"]:
+        df = pd.DataFrame(st.session_state["items"])
+        edited_df = st.data_editor(
+            df,
+            use_container_width=True,
+            num_rows="dynamic",
+            column_config={
+                "item_name": st.column_config.TextColumn("Item Name", width="medium"),
+                "success_rate": st.column_config.NumberColumn("Success Rate (%)", min_value=0.0, max_value=100.0),
+                "efficiency": st.column_config.NumberColumn("Efficiency (%)", min_value=0.0, max_value=100.0),
+                "calculated_cost": st.column_config.NumberColumn("Calculated Cost", disabled=True, format="%.0f"),
+                "metals_alloys": st.column_config.NumberColumn("Metals & Alloys (%)", min_value=0.0, max_value=100.0),
+                "synthetic_materials": st.column_config.NumberColumn("Synthetic Materials (%)", min_value=0.0, max_value=100.0),
+                "tech_components": st.column_config.NumberColumn("Tech Components (%)", min_value=0.0, max_value=100.0),
+                "energy_sources": st.column_config.NumberColumn("Energy Sources (%)", min_value=0.0, max_value=100.0),
+                "biomatter": st.column_config.NumberColumn("Biomatter (%)", min_value=0.0, max_value=100.0),
+                "chemicals": st.column_config.NumberColumn("Chemicals (%)", min_value=0.0, max_value=100.0)
+            },
+            key="item_editor",
+            column_order=None,  # Show all columns
+            hide_index=True
+        )
+        # Enable sorting for all columns
+        # Users can click column headers to sort
+
+        # Update costs if data was edited
+        if not edited_df.equals(df):
+            updated_items = []
+            for _, row in edited_df.iterrows():
+                row['calculated_cost'] = calculate_cost(row['success_rate'], row['efficiency'], st.session_state["cost_multiplier"])
+                updated_items.append(row.to_dict())
+            st.session_state["items"] = updated_items
+            st.rerun()
+    else:
+        st.info("No items added yet. Use the form above to add your first item.")
+
+
     # Split 50/50 layout: Overview graph and Add new items
     col_overview, col_add_item = st.columns(2)
     
@@ -200,12 +240,12 @@ with tab1:
                 rebalance_resources(key)
                 break
         
-        new_metals = st.slider("Metals & Alloys", 0.0, 100.0, st.session_state.get("new_metals", 100.0), step=step, key="new_metals")
-        new_synthetic = st.slider("Synthetic Materials", 0.0, 100.0, st.session_state.get("new_synthetic", 0.0), step=step, key="new_synthetic")
-        new_tech = st.slider("Tech Components", 0.0, 100.0, st.session_state.get("new_tech", 0.0), step=step, key="new_tech")
-        new_energy = st.slider("Energy Sources", 0.0, 100.0, st.session_state.get("new_energy", 0.0), step=step, key="new_energy")
-        new_bio = st.slider("Biomatter", 0.0, 100.0, st.session_state.get("new_bio", 0.0), step=step, key="new_bio")
-        new_chemicals = st.slider("Chemicals", 0.0, 100.0, st.session_state.get("new_chemicals", 0.0), step=step, key="new_chemicals")
+        new_metals = st.slider("🔩 Metals & Alloys", 0.0, 100.0, st.session_state.get("new_metals", 100.0), step=step, key="new_metals")
+        new_synthetic = st.slider("🧵 Synthetic Materials", 0.0, 100.0, st.session_state.get("new_synthetic", 0.0), step=step, key="new_synthetic")
+        new_tech = st.slider("💻 Tech Components", 0.0, 100.0, st.session_state.get("new_tech", 0.0), step=step, key="new_tech")
+        new_energy = st.slider("⚡ Energy Sources", 0.0, 100.0, st.session_state.get("new_energy", 0.0), step=step, key="new_energy")
+        new_bio = st.slider("🌿 Biomatter", 0.0, 100.0, st.session_state.get("new_bio", 0.0), step=step, key="new_bio")
+        new_chemicals = st.slider("🧪 Chemicals", 0.0, 100.0, st.session_state.get("new_chemicals", 0.0), step=step, key="new_chemicals")
         
         resource_sum = new_metals + new_synthetic + new_tech + new_energy + new_bio + new_chemicals
         st.progress(resource_sum / 100.0, f"Total: {resource_sum:.1f}%")
@@ -234,47 +274,7 @@ with tab1:
                 st.rerun()
             else:
                 st.error("Resource distribution must sum to 100%")
-                
-    # Separator
-    st.divider()
 
-    # Current Items Table
-    st.subheader("📋 Current Items Table")
-    if st.session_state["items"]:
-        df = pd.DataFrame(st.session_state["items"])
-        edited_df = st.data_editor(
-            df,
-            use_container_width=True,
-            num_rows="dynamic",
-            column_config={
-                "item_name": st.column_config.TextColumn("Item Name", width="medium"),
-                "success_rate": st.column_config.NumberColumn("Success Rate (%)", min_value=0.0, max_value=100.0),
-                "efficiency": st.column_config.NumberColumn("Efficiency (%)", min_value=0.0, max_value=100.0),
-                "calculated_cost": st.column_config.NumberColumn("Calculated Cost", disabled=True, format="%.0f"),
-                "metals_alloys": st.column_config.NumberColumn("Metals & Alloys (%)", min_value=0.0, max_value=100.0),
-                "synthetic_materials": st.column_config.NumberColumn("Synthetic Materials (%)", min_value=0.0, max_value=100.0),
-                "tech_components": st.column_config.NumberColumn("Tech Components (%)", min_value=0.0, max_value=100.0),
-                "energy_sources": st.column_config.NumberColumn("Energy Sources (%)", min_value=0.0, max_value=100.0),
-                "biomatter": st.column_config.NumberColumn("Biomatter (%)", min_value=0.0, max_value=100.0),
-                "chemicals": st.column_config.NumberColumn("Chemicals (%)", min_value=0.0, max_value=100.0)
-            },
-            key="item_editor",
-            column_order=None,  # Show all columns
-            hide_index=True
-        )
-        # Enable sorting for all columns
-        # Users can click column headers to sort
-
-        # Update costs if data was edited
-        if not edited_df.equals(df):
-            updated_items = []
-            for _, row in edited_df.iterrows():
-                row['calculated_cost'] = calculate_cost(row['success_rate'], row['efficiency'], st.session_state["cost_multiplier"])
-                updated_items.append(row.to_dict())
-            st.session_state["items"] = updated_items
-            st.rerun()
-    else:
-        st.info("No items added yet. Use the form above to add your first item.")
 
 with tab2:
     st.header("Balance Analysis")
