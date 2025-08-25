@@ -80,15 +80,17 @@ if new_cost_max != st.session_state["cost_max_value"]:
 with tab1:
     st.header("Item Data Management")
 
-
     # Current Items Table
     st.subheader("📋 Current Items Table")
     if st.session_state["items"]:
         df = pd.DataFrame(st.session_state["items"])
+        # Use a fixed number of rows to prevent the data editor from showing
+        # an extra blank row that can be clicked to add items. This keeps
+        # editing enabled for existing rows but disables adding via the UI.
         edited_df = st.data_editor(
             df,
             use_container_width=True,
-            num_rows="dynamic",
+            num_rows="fixed",
             column_config={
                 "item_name": st.column_config.TextColumn("Item Name", width="medium"),
                 "success_rate": st.column_config.NumberColumn("Success Rate (%)", min_value=0.0, max_value=100.0),
