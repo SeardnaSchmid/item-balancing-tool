@@ -13,7 +13,7 @@ if "items" not in st.session_state:
             "item_name": "Power Sword",
             "success_rate": 85.0,
             "efficiency": 90.0,
-            "calculated_cost": 87500,  # Will be recalculated
+            "calculated_cost": 76500,  # Will be recalculated
             "metals_alloys": 40.0,
             "synthetic_materials": 20.0,
             "tech_components": 30.0,
@@ -25,7 +25,7 @@ if "items" not in st.session_state:
             "item_name": "Healing Potion",
             "success_rate": 95.0,
             "efficiency": 60.0,
-            "calculated_cost": 52500,  # Will be recalculated
+            "calculated_cost": 57000,  # Will be recalculated
             "metals_alloys": 5.0,
             "synthetic_materials": 10.0,
             "tech_components": 5.0,
@@ -40,35 +40,16 @@ if "cost_multiplier" not in st.session_state:
     st.session_state["cost_multiplier"] = 1.0
 
 # Cost calculation function
-def calculate_cost(success_rate, efficiency, resource_distribution, cost_multiplier=1.0):
-    """Calculate item cost based on success rate, efficiency, and resource distribution"""
-    base_cost = (success_rate + efficiency) / 200.0  # Normalize to 0-1 range
-    
-    # Resource complexity multiplier
-    resource_multiplier = 1.0
-    rare_resources = resource_distribution.get('tech_components', 0) + resource_distribution.get('synthetic_materials', 0)
-    if rare_resources > 50:
-        resource_multiplier += 0.3
-    elif rare_resources > 30:
-        resource_multiplier += 0.1
-    
-    # Apply the cost multiplier and scale to 1-100000 range
-    normalized_cost = base_cost * resource_multiplier * cost_multiplier
-    # Scale from 0-1 range to 1-100000 range
-    final_cost = 1 + (normalized_cost * 99999)
-    return min(final_cost, 100000)  # Cap at 100000
+def calculate_cost(success_rate, efficiency, cost_multiplier=1.0):
+    """Calculate item cost based on success rate and efficiency"""
+    # Simple formula: (success_rate * efficiency / 10000) * cost_multiplier * 100000
+    base_cost = (success_rate * efficiency) / 10000.0
+    final_cost = base_cost * cost_multiplier * 100000
+    return final_cost
 
 # Update costs for existing items
 for item in st.session_state["items"]:
-    resource_dist = {
-        'metals_alloys': item.get('metals_alloys', 0),
-        'synthetic_materials': item.get('synthetic_materials', 0),
-        'tech_components': item.get('tech_components', 0),
-        'energy_sources': item.get('energy_sources', 0),
-        'biomatter': item.get('biomatter', 0),
-        'chemicals': item.get('chemicals', 0)
-    }
-    item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], resource_dist, st.session_state["cost_multiplier"])
+    item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], st.session_state["cost_multiplier"])
 
 # Create tabs
 tab1, tab2, tab3 = st.tabs(["📊 Data Input", "⚖️ Balance Analysis", "📈 Advanced Metrics"])
@@ -81,7 +62,7 @@ new_cost_multiplier = st.sidebar.slider(
     max_value=10.0, 
     value=st.session_state["cost_multiplier"], 
     step=0.1,
-    help="Scale all item costs by this multiplier. Cost range: 1-100,000 gold/credits."
+    help="Scale all item costs. Formula: (success_rate × efficiency / 10000) × multiplier × 100000"
 )
 
 # Update cost multiplier if changed
@@ -89,15 +70,7 @@ if new_cost_multiplier != st.session_state["cost_multiplier"]:
     st.session_state["cost_multiplier"] = new_cost_multiplier
     # Recalculate all item costs
     for item in st.session_state["items"]:
-        resource_dist = {
-            'metals_alloys': item.get('metals_alloys', 0),
-            'synthetic_materials': item.get('synthetic_materials', 0),
-            'tech_components': item.get('tech_components', 0),
-            'energy_sources': item.get('energy_sources', 0),
-            'biomatter': item.get('biomatter', 0),
-            'chemicals': item.get('chemicals', 0)
-        }
-        item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], resource_dist, st.session_state["cost_multiplier"])
+        item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], st.session_state["cost_multiplier"])
     st.rerun()
 
 with tab1:
@@ -163,7 +136,7 @@ with tab1:
                 st.metric("Avg Cost", f"{df['calculated_cost'].mean():.0f}")
             
             # Cost multiplier indicator
-            st.info(f"🎚️ **Cost Multiplier:** {st.session_state['cost_multiplier']:.1f}x - Cost range: 1-100,000")
+            st.info(f"🎚️ **Cost Multiplier:** {st.session_state['cost_multiplier']:.1f}x - Formula: (success × efficiency / 10000) × multiplier × 100000")
         else:
             st.info("No items to visualize yet. Add your first item using the form on the right!")
 
@@ -174,30 +147,75 @@ with tab1:
         new_success_rate = st.slider("Success Rate (%)", 0.0, 100.0, 50.0, key="new_success_rate")
         new_efficiency = st.slider("Efficiency (%)", 0.0, 100.0, 50.0, key="new_efficiency")
         
+        # Initialize previous values in session state if they don't exist
+        resource_keys = ["new_metals", "new_synthetic", "new_tech", "new_energy", "new_bio", "new_chemicals"]
+        for key in resource_keys:
+            if f"prev_{key}" not in st.session_state:
+                st.session_state[f"prev_{key}"] = st.session_state.get(key, 0.0)
+        
+        # Function to rebalance resources
+        def rebalance_resources(changed_key):
+            # Get current values
+            values = {key: st.session_state[key] for key in resource_keys}
+            
+            # Calculate how much the changed value was adjusted
+            prev_value = st.session_state[f"prev_{changed_key}"]
+            current_value = values[changed_key]
+            change = current_value - prev_value
+            
+            # Skip rebalancing if no change
+            if abs(change) < 0.001:
+                return
+                
+            # Find non-zero resources excluding the changed one
+            non_zero_keys = [key for key in resource_keys if key != changed_key and values[key] > 0]
+            
+            if non_zero_keys:
+                # Calculate total of non-zero, non-changed resources
+                total_others = sum(values[key] for key in non_zero_keys)
+                
+                # Calculate adjustment needed to maintain 100% total
+                total_current = sum(values.values())
+                adjustment_needed = change / (len(non_zero_keys) if total_others == 0 else 1)
+                
+                # Adjust other resources proportionally
+                for key in non_zero_keys:
+                    proportion = values[key] / total_others if total_others > 0 else 1/len(non_zero_keys)
+                    new_value = max(0.0, values[key] - change * proportion)
+                    st.session_state[key] = new_value
+            
+            # Update all previous values
+            for key in resource_keys:
+                st.session_state[f"prev_{key}"] = st.session_state[key]
+        
         st.write("**Resource Distribution (%)**")
-        st.write("*Must sum to 100%*")
-        new_metals = st.number_input("Metals & Alloys", 0.0, 100.0, 20.0, key="new_metals")
-        new_synthetic = st.number_input("Synthetic Materials", 0.0, 100.0, 20.0, key="new_synthetic")
-        new_tech = st.number_input("Tech Components", 0.0, 100.0, 20.0, key="new_tech")
-        new_energy = st.number_input("Energy Sources", 0.0, 100.0, 20.0, key="new_energy")
-        new_bio = st.number_input("Biomatter", 0.0, 100.0, 10.0, key="new_bio")
-        new_chemicals = st.number_input("Chemicals", 0.0, 100.0, 10.0, key="new_chemicals")
+        st.write("*Resources will auto-balance to 100%*")
+        step = 5.0
+        
+        # Detect which slider changed and rebalance
+        for i, key in enumerate(resource_keys):
+            current = st.session_state.get(key, 0.0)
+            prev = st.session_state.get(f"prev_{key}", current)
+            if abs(current - prev) > 0.001:
+                rebalance_resources(key)
+                break
+        
+        new_metals = st.slider("Metals & Alloys", 0.0, 100.0, st.session_state.get("new_metals", 100.0), step=step, key="new_metals")
+        new_synthetic = st.slider("Synthetic Materials", 0.0, 100.0, st.session_state.get("new_synthetic", 0.0), step=step, key="new_synthetic")
+        new_tech = st.slider("Tech Components", 0.0, 100.0, st.session_state.get("new_tech", 0.0), step=step, key="new_tech")
+        new_energy = st.slider("Energy Sources", 0.0, 100.0, st.session_state.get("new_energy", 0.0), step=step, key="new_energy")
+        new_bio = st.slider("Biomatter", 0.0, 100.0, st.session_state.get("new_bio", 0.0), step=step, key="new_bio")
+        new_chemicals = st.slider("Chemicals", 0.0, 100.0, st.session_state.get("new_chemicals", 0.0), step=step, key="new_chemicals")
         
         resource_sum = new_metals + new_synthetic + new_tech + new_energy + new_bio + new_chemicals
+        st.progress(resource_sum / 100.0, f"Total: {resource_sum:.1f}%")
+        
         if abs(resource_sum - 100.0) > 0.1:
             st.warning(f"Resource distribution sums to {resource_sum:.1f}%, should be 100%")
         
         if st.button("Add Item", use_container_width=True) and new_item_name:
             if abs(resource_sum - 100.0) <= 0.1:
-                resource_dist = {
-                    'metals_alloys': new_metals,
-                    'synthetic_materials': new_synthetic,
-                    'tech_components': new_tech,
-                    'energy_sources': new_energy,
-                    'biomatter': new_bio,
-                    'chemicals': new_chemicals
-                }
-                calculated_cost = calculate_cost(new_success_rate, new_efficiency, resource_dist, st.session_state["cost_multiplier"])
+                calculated_cost = calculate_cost(new_success_rate, new_efficiency, st.session_state["cost_multiplier"])
                 
                 new_item = {
                     "item_name": new_item_name,
@@ -216,7 +234,7 @@ with tab1:
                 st.rerun()
             else:
                 st.error("Resource distribution must sum to 100%")
-
+                
     # Separator
     st.divider()
 
@@ -251,15 +269,7 @@ with tab1:
         if not edited_df.equals(df):
             updated_items = []
             for _, row in edited_df.iterrows():
-                resource_dist = {
-                    'metals_alloys': row['metals_alloys'],
-                    'synthetic_materials': row['synthetic_materials'],
-                    'tech_components': row['tech_components'],
-                    'energy_sources': row['energy_sources'],
-                    'biomatter': row['biomatter'],
-                    'chemicals': row['chemicals']
-                }
-                row['calculated_cost'] = calculate_cost(row['success_rate'], row['efficiency'], resource_dist, st.session_state["cost_multiplier"])
+                row['calculated_cost'] = calculate_cost(row['success_rate'], row['efficiency'], st.session_state["cost_multiplier"])
                 updated_items.append(row.to_dict())
             st.session_state["items"] = updated_items
             st.rerun()
