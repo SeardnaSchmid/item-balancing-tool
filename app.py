@@ -5,12 +5,32 @@ import numpy as np
 import uuid
 import json
 from pathlib import Path
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import json
+import numpy as np
+import uuid
 
 st.set_page_config(page_title="Item Balancing Tool", layout="wide")
 st.title("🎮 Item Balancing Tool")
 
 # Data file (local to this source file)
 DATA_FILE = Path(__file__).parent / "data.json"
+
+# Item categories
+CATEGORIES = [
+    "Weapons",
+    "Armor",
+    "Gadgets",
+    "Medical Items",
+    "Consumables",
+    "Upgrades/Mods",
+    "Tools",
+    "Resources",
+    "Blueprints",
+    "Special/Unique"
+]
 
 
 def load_data_file(path: Path):
@@ -55,6 +75,7 @@ if "items" not in st.session_state:
         st.session_state["items"] = [
             {
                 "item_name": "Power Sword",
+                "category": "Weapons",
                 "success_rate": 85.0,
                 "efficiency": 90.0,
                 "calculated_cost": 76500,  # Will be recalculated
@@ -67,6 +88,7 @@ if "items" not in st.session_state:
             },
             {
                 "item_name": "Healing Potion",
+                "category": "Medical Items",
                 "success_rate": 95.0,
                 "efficiency": 60.0,
                 "calculated_cost": 57000,  # Will be recalculated
@@ -103,6 +125,25 @@ tab1, tab2, tab3 = st.tabs(["📊 Data Input", "⚖️ Balance Analysis", "📈 
 
 # Sidebar for global settings
 st.sidebar.markdown("### ⚙️ Global Settings")
+
+# Category filter
+st.sidebar.markdown("### 🔎 Filter Items")
+category_filter = st.sidebar.radio("Filter by:", ["All Categories", "Specific Category"], key="filter_type")
+
+filtered_items = st.session_state["items"]
+
+if category_filter == "Specific Category":
+    selected_category = st.sidebar.selectbox(
+        "Select Category",
+        ["All"] + CATEGORIES,
+        key="category_filter"
+    )
+    
+    if selected_category != "All":
+        filtered_items = [item for item in st.session_state["items"] 
+                        if item.get("category") == selected_category]
+
+st.sidebar.markdown("---")
 new_cost_max = st.sidebar.number_input(
     "Maximum Cost Value",
     min_value=1,
@@ -126,7 +167,7 @@ with tab1:
     # Current Items Table
     st.subheader("📋 Current Items Table")
     if st.session_state["items"]:
-        df = pd.DataFrame(st.session_state["items"])
+        df = pd.DataFrame(filtered_items)
         # Use a fixed number of rows to prevent the data editor from showing
         # an extra blank row that can be clicked to add items. This keeps
         # editing enabled for existing rows but disables adding via the UI.
@@ -136,6 +177,7 @@ with tab1:
             num_rows="fixed",
             column_config={
                 "item_name": st.column_config.TextColumn("Item Name", width="medium"),
+                "category": st.column_config.SelectboxColumn("Category", options=CATEGORIES),
                 "success_rate": st.column_config.NumberColumn("Success Rate (%)", min_value=0.0, max_value=100.0),
                 "efficiency": st.column_config.NumberColumn("Efficiency (%)", min_value=0.0, max_value=100.0),
                 "calculated_cost": st.column_config.NumberColumn("Calculated Cost", disabled=True, format="%.0f"),
@@ -153,13 +195,21 @@ with tab1:
         # Enable sorting for all columns
         # Users can click column headers to sort
 
-        # Update costs if data was edited
+                # Update costs if data was edited
         if not edited_df.equals(df):
             updated_items = []
             for _, row in edited_df.iterrows():
-                row['calculated_cost'] = calculate_cost(row['success_rate'], row['efficiency'], st.session_state["cost_max_value"])
-                updated_items.append(row.to_dict())
-            st.session_state["items"] = updated_items
+                item = row.to_dict()
+                item['calculated_cost'] = calculate_cost(item['success_rate'], item['efficiency'], st.session_state["cost_max_value"])
+                updated_items.append(item)
+                
+            # Find the original items in the full list and update them
+            for updated_item in updated_items:
+                for i, original_item in enumerate(st.session_state["items"]):
+                    if original_item.get("item_name") == updated_item.get("item_name"):
+                        st.session_state["items"][i] = updated_item
+                        break
+                
             st.rerun()
     else:
         st.info("No items added yet. Use the form above to add your first item.")
@@ -171,7 +221,7 @@ with tab1:
     with col_overview:
         st.subheader("📊 Overview of All Items")
         if st.session_state["items"]:
-            df = pd.DataFrame(st.session_state["items"])
+            df = pd.DataFrame(filtered_items)
 
             # Main scatter plot - Efficiency vs Success Rate
             fig = go.Figure()
@@ -219,7 +269,10 @@ with tab1:
             # Summary statistics
             metrics_col1, metrics_col2 = st.columns(2)
             with metrics_col1:
-                st.metric("Total Items", len(df))
+                if len(filtered_items) != len(st.session_state["items"]):
+                    st.metric("Filtered Items", f"{len(df)} of {len(st.session_state['items'])}")
+                else:
+                    st.metric("Total Items", len(df))
                 st.metric("Avg Success Rate", f"{df['success_rate'].mean():.1f}%")
             with metrics_col2:
                 st.metric("Avg Efficiency", f"{df['efficiency'].mean():.1f}%")
@@ -234,6 +287,10 @@ with tab1:
         st.subheader("➕ Add New Items")
         
         new_item_name = st.text_input("Item Name", key="new_item_name")
+        
+        # Category selection - simplified to a single dropdown
+        new_category = st.selectbox("Category", options=CATEGORIES, key="new_category")
+        
         new_success_rate = st.slider("Success Rate (%)", 0.0, 100.0, 50.0, key="new_success_rate")
         new_efficiency = st.slider("Efficiency (%)", 0.0, 100.0, 50.0, key="new_efficiency")
         
@@ -310,6 +367,7 @@ with tab1:
                 calculated_cost = calculate_cost(new_success_rate, new_efficiency, st.session_state["cost_max_value"])
                 new_item = {
                     "item_name": item_name,
+                    "category": new_category,
                     "success_rate": new_success_rate,
                     "efficiency": new_efficiency,
                     "calculated_cost": calculated_cost,
@@ -331,7 +389,7 @@ with tab2:
     st.header("Balance Analysis")
     
     if st.session_state["items"]:
-        df = pd.DataFrame(st.session_state["items"])
+        df = pd.DataFrame(filtered_items)
         
         # Resource composition analysis
         st.subheader("Resource Composition Analysis")
@@ -345,9 +403,9 @@ with tab2:
         
         for i, (col, name) in enumerate(zip(resource_cols, resource_names)):
             fig2.add_trace(go.Bar(
-                name=name,
                 x=df['item_name'],
                 y=df[col],
+                name=name,
                 marker_color=colors[i % len(colors)]
             ))
             
@@ -359,40 +417,85 @@ with tab2:
             height=400,
             template="plotly_white"
         )
-        st.plotly_chart(fig2, use_container_width=True)
         
         # Balance insights
         col1, col2 = st.columns(2)
         
         with col1:
             st.subheader("Top Performers")
-            best_efficiency = df.loc[df['efficiency'].idxmax()]
-            best_success = df.loc[df['success_rate'].idxmax()]
-            best_value = df.loc[(df['success_rate'] + df['efficiency'] - df['calculated_cost'] * 100).idxmax()]
+            if not df.empty:
+                best_efficiency = df.loc[df['efficiency'].idxmax()]
+                best_success = df.loc[df['success_rate'].idxmax()]
+                best_value = df.loc[(df['success_rate'] + df['efficiency'] - df['calculated_cost']/1000).idxmax()]
+                
+                st.metric("Most Efficient Item", best_efficiency['item_name'], f"{best_efficiency['efficiency']:.1f}%")
+                st.metric("Highest Success Rate", best_success['item_name'], f"{best_success['success_rate']:.1f}%")
+                st.metric("Best Value", best_value['item_name'], f"Score: {(best_value['success_rate'] + best_value['efficiency'] - best_value['calculated_cost']/1000):.1f}")
             
-            st.metric("Most Efficient Item", best_efficiency['item_name'], f"{best_efficiency['efficiency']:.1f}%")
-            st.metric("Highest Success Rate", best_success['item_name'], f"{best_success['success_rate']:.1f}%")
-            st.metric("Best Value", best_value['item_name'], f"Score: {(best_value['success_rate'] + best_value['efficiency'] - best_value['calculated_cost'] * 100):.1f}")
+                # Category distribution
+                st.subheader("Category Distribution")
+                if 'category' in df.columns:
+                    category_counts = df['category'].value_counts()
+                    fig_cat = go.Figure(data=[go.Pie(labels=category_counts.index, 
+                                                    values=category_counts.values, 
+                                                    hole=.3)])
+                    fig_cat.update_layout(height=300)
+                    st.plotly_chart(fig_cat, use_container_width=True)
             
         with col2:
             st.subheader("Balance Recommendations")
-            
-            # Identify overpowered items
-            overpowered = df[(df['success_rate'] > 80) & (df['efficiency'] > 80) & (df['calculated_cost'] < 0.6)]
-            if not overpowered.empty:
-                st.warning(f"⚠️ Potentially overpowered: {', '.join(overpowered['item_name'])}")
-            
-            # Identify underpowered items
-            underpowered = df[(df['success_rate'] < 40) & (df['efficiency'] < 40) & (df['calculated_cost'] > 0.5)]
-            if not underpowered.empty:
-                st.info(f"💡 Consider buffing: {', '.join(underpowered['item_name'])}")
-            
-            # Resource diversity
-            avg_resource_usage = df[resource_cols].mean()
-            underused_resources = avg_resource_usage[avg_resource_usage < 10].index
-            if len(underused_resources) > 0:
-                underused_names = [resource_names[resource_cols.index(col)] for col in underused_resources]
-                st.info(f"🔍 Underused resources: {', '.join(underused_names)}")
+            if not df.empty:
+                # Identify overpowered items
+                overpowered = df[(df['success_rate'] > 80) & (df['efficiency'] > 80) & (df['calculated_cost'] < 60000)]
+                if not overpowered.empty:
+                    st.warning(f"⚠️ Potentially overpowered: {', '.join(overpowered['item_name'])}")
+                
+                # Identify underpowered items
+                underpowered = df[(df['success_rate'] < 40) & (df['efficiency'] < 40) & (df['calculated_cost'] > 20000)]
+                if not underpowered.empty:
+                    st.info(f"💡 Consider buffing: {', '.join(underpowered['item_name'])}")
+                
+                # Resource diversity
+                avg_resource_usage = df[resource_cols].mean()
+                underused_resources = avg_resource_usage[avg_resource_usage < 10].index
+                if len(underused_resources) > 0:
+                    underused_names = [resource_names[resource_cols.index(col)] for col in underused_resources]
+                    st.info(f"🔍 Underused resources: {', '.join(underused_names)}")
+                
+                # Category balance analysis
+                if 'category' in df.columns:
+                    # Group by category and compute averages
+                    cat_stats = df.groupby('category').agg({
+                        'success_rate': 'mean',
+                        'efficiency': 'mean',
+                        'calculated_cost': 'mean'
+                    }).reset_index()
+                    
+                    # Find strongest and weakest categories
+                    cat_stats['power_level'] = cat_stats['success_rate'] + cat_stats['efficiency'] - cat_stats['calculated_cost']/1000
+                    
+                    if len(cat_stats) > 1:
+                        strongest = cat_stats.loc[cat_stats['power_level'].idxmax()]
+                        weakest = cat_stats.loc[cat_stats['power_level'].idxmin()]
+                        
+                        st.markdown("#### Category Balance")
+                        st.info(f"💪 Strongest category: **{strongest['category']}** (Power: {strongest['power_level']:.1f})")
+                        st.info(f"⚖️ Weakest category: **{weakest['category']}** (Power: {weakest['power_level']:.1f})")
+                        
+                        # Display category comparison
+                        fig_cat_comp = go.Figure()
+                        fig_cat_comp.add_trace(go.Bar(
+                            x=cat_stats['category'],
+                            y=cat_stats['power_level'],
+                            marker_color='darkblue'
+                        ))
+                        fig_cat_comp.update_layout(
+                            title="Category Power Levels",
+                            xaxis_title="Category",
+                            yaxis_title="Power Level",
+                            height=300
+                        )
+                        st.plotly_chart(fig_cat_comp, use_container_width=True)
     else:
         st.info("Add some items in the Data Input tab to see balance analysis.")
 
@@ -400,7 +503,7 @@ with tab3:
     st.header("Advanced Metrics")
     
     if st.session_state["items"]:
-        df = pd.DataFrame(st.session_state["items"])
+        df = pd.DataFrame(filtered_items)
         
         # Cost vs Performance Analysis
         st.subheader("Cost vs Performance Analysis")
@@ -454,7 +557,7 @@ with tab3:
         
         with col1:
             st.metric("Performance Std Dev", f"{df['performance_score'].std():.1f}")
-            st.metric("Cost Range", f"{df['calculated_cost'].min():.2f} - {df['calculated_cost'].max():.2f}")
+            st.metric("Cost Range", f"{df['calculated_cost'].min():.0f} - {df['calculated_cost'].max():.0f}")
             
         with col2:
             correlation = df['calculated_cost'].corr(df['performance_score'])
@@ -463,6 +566,83 @@ with tab3:
             st.metric("Balance Score", f"{max(balance_score, 0):.0f}/100")
             
         with col3:
+            if 'category' in df.columns and len(df['category'].unique()) > 1:
+                # Count items per category
+                category_counts = df['category'].value_counts()
+                st.metric("Most Common Category", category_counts.index[0], f"{category_counts.values[0]} items")
+                st.metric("Categories Present", f"{len(category_counts)} of {len(CATEGORIES)}")
+            else:
+                st.metric("Items Analyzed", f"{len(df)}")
+                if len(filtered_items) != len(st.session_state["items"]):
+                    st.metric("Total Items", f"{len(filtered_items)} of {len(st.session_state['items'])}")
+                else:
+                    st.metric("Total Items", f"{len(st.session_state['items'])}")
+            
+        # Add category-based analysis if categories exist
+        if 'category' in df.columns and len(df['category'].unique()) > 1:
+            st.subheader("Category Performance Analysis")
+            
+            # Create category comparison dataframe
+            cat_stats = df.groupby('category').agg({
+                'success_rate': 'mean', 
+                'efficiency': 'mean',
+                'calculated_cost': 'mean',
+                'performance_score': 'mean'
+            }).reset_index()
+            
+            # Bar chart comparing categories
+            fig_cat = go.Figure()
+            
+            # Add performance score bars
+            fig_cat.add_trace(go.Bar(
+                x=cat_stats['category'],
+                y=cat_stats['performance_score'],
+                name='Performance Score',
+                marker_color='darkblue'
+            ))
+            
+            # Add cost line (on secondary y-axis)
+            fig_cat.add_trace(go.Scatter(
+                x=cat_stats['category'],
+                y=cat_stats['calculated_cost'],
+                name='Average Cost',
+                mode='lines+markers',
+                marker=dict(color='red'),
+                yaxis='y2'
+            ))
+            
+            fig_cat.update_layout(
+                title='Category Performance vs Cost',
+                xaxis_title='Category',
+                yaxis_title='Performance Score',
+                yaxis2=dict(
+                    title='Cost',
+                    overlaying='y',
+                    side='right'
+                ),
+                legend=dict(
+                    orientation='h',
+                    yanchor='bottom',
+                    y=1.02,
+                    xanchor='right',
+                    x=1
+                ),
+                height=400
+            )
+            
+            st.plotly_chart(fig_cat, use_container_width=True)
+            
+            # Show detailed stats in table
+            st.dataframe(
+                cat_stats.round({
+                    'success_rate': 1, 
+                    'efficiency': 1, 
+                    'calculated_cost': 0,
+                    'performance_score': 1
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
             # Calculate how many items are above/below ideal line
             expected_performance = df['calculated_cost'] * 100
             overperforming = (df['performance_score'] > expected_performance * 1.1).sum()
@@ -526,9 +706,21 @@ if uploaded is not None:
             items = None
 
         if items is not None:
-            st.session_state["items"] = items
-            st.success(f"Imported {len(items)} items from uploaded file")
-            st.rerun()
+            # Validate each item has required fields and add category if missing
+            valid_items = []
+            for item in items:
+                if isinstance(item, dict) and "item_name" in item:
+                    # If no category is set, default to first category
+                    if "category" not in item:
+                        item["category"] = CATEGORIES[0]
+                    valid_items.append(item)
+            
+            if valid_items:
+                st.session_state["items"] = valid_items
+                st.success(f"Imported {len(valid_items)} items from uploaded file")
+                st.rerun()
+            else:
+                st.error("No valid items found in the uploaded file")
     except Exception as e:
         st.error(f"Failed to parse uploaded JSON: {e}")
 
