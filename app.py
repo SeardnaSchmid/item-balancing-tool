@@ -18,6 +18,140 @@ st.title("🎮 Item Balancing Tool")
 # Data file (local to this source file)
 DATA_FILE = Path(__file__).parent / "data.json"
 
+# Sample data directly embedded in the code
+SAMPLE_DATA = [
+  {
+    "item_name": "Plasma Rifle",
+    "category": "Weapons",
+    "success_rate": 85.0,
+    "efficiency": 75.0,
+    "calculated_cost": 63750,
+    "metals_alloys": 30.0,
+    "synthetic_materials": 15.0,
+    "tech_components": 40.0,
+    "energy_sources": 10.0,
+    "biomatter": 0.0,
+    "chemicals": 5.0
+  },
+  {
+    "item_name": "Laser Pistol",
+    "category": "Weapons",
+    "success_rate": 90.0,
+    "efficiency": 65.0,
+    "calculated_cost": 58500,
+    "metals_alloys": 25.0,
+    "synthetic_materials": 15.0,
+    "tech_components": 35.0,
+    "energy_sources": 20.0,
+    "biomatter": 0.0,
+    "chemicals": 5.0
+  },
+  {
+    "item_name": "Vibroblade",
+    "category": "Weapons",
+    "success_rate": 95.0,
+    "efficiency": 90.0,
+    "calculated_cost": 85500,
+    "metals_alloys": 60.0,
+    "synthetic_materials": 20.0,
+    "tech_components": 15.0,
+    "energy_sources": 5.0,
+    "biomatter": 0.0,
+    "chemicals": 0.0
+  },
+  {
+    "item_name": "Combat Armor",
+    "category": "Armor",
+    "success_rate": 80.0,
+    "efficiency": 70.0,
+    "calculated_cost": 56000,
+    "metals_alloys": 45.0,
+    "synthetic_materials": 35.0,
+    "tech_components": 10.0,
+    "energy_sources": 0.0,
+    "biomatter": 0.0,
+    "chemicals": 10.0
+  },
+  {
+    "item_name": "Energy Shield",
+    "category": "Armor",
+    "success_rate": 70.0,
+    "efficiency": 95.0,
+    "calculated_cost": 66500,
+    "metals_alloys": 15.0,
+    "synthetic_materials": 20.0,
+    "tech_components": 35.0,
+    "energy_sources": 30.0,
+    "biomatter": 0.0,
+    "chemicals": 0.0
+  },
+  {
+    "item_name": "Hacking Module",
+    "category": "Gadgets",
+    "success_rate": 90.0,
+    "efficiency": 85.0,
+    "calculated_cost": 76500,
+    "metals_alloys": 10.0,
+    "synthetic_materials": 15.0,
+    "tech_components": 65.0,
+    "energy_sources": 10.0,
+    "biomatter": 0.0,
+    "chemicals": 0.0
+  },
+  {
+    "item_name": "Cloaking Device",
+    "category": "Gadgets",
+    "success_rate": 65.0,
+    "efficiency": 95.0,
+    "calculated_cost": 61750,
+    "metals_alloys": 15.0,
+    "synthetic_materials": 25.0,
+    "tech_components": 40.0,
+    "energy_sources": 20.0,
+    "biomatter": 0.0,
+    "chemicals": 0.0
+  },
+  {
+    "item_name": "Emergency Medkit",
+    "category": "Medical Items",
+    "success_rate": 95.0,
+    "efficiency": 80.0,
+    "calculated_cost": 76000,
+    "metals_alloys": 5.0,
+    "synthetic_materials": 20.0,
+    "tech_components": 15.0,
+    "energy_sources": 0.0,
+    "biomatter": 40.0,
+    "chemicals": 20.0
+  },
+  {
+    "item_name": "Healing Nanites",
+    "category": "Medical Items",
+    "success_rate": 85.0,
+    "efficiency": 90.0,
+    "calculated_cost": 76500,
+    "metals_alloys": 5.0,
+    "synthetic_materials": 15.0,
+    "tech_components": 35.0,
+    "energy_sources": 5.0,
+    "biomatter": 20.0,
+    "chemicals": 20.0
+  },
+  {
+    "item_name": "Strength Booster",
+    "category": "Consumables",
+    "success_rate": 80.0,
+    "efficiency": 70.0,
+    "calculated_cost": 56000,
+    "metals_alloys": 0.0,
+    "synthetic_materials": 10.0,
+    "tech_components": 5.0,
+    "energy_sources": 0.0,
+    "biomatter": 45.0,
+    "chemicals": 40.0
+  }
+]
+
 # Item categories
 CATEGORIES = [
     "Weapons",
@@ -33,22 +167,25 @@ CATEGORIES = [
 ]
 
 
-def load_data_file(path: Path):
+def load_data_file(path=DATA_FILE):
     """Try to load items from a JSON file.
 
     Accepts either a top-level list of item dicts or an object with an "items" key.
     Returns list on success, or None on failure.
     """
-    if not path.exists():
-        return None
     try:
+        if not path.exists():
+            return None
+            
         with path.open("r", encoding="utf-8") as fh:
             data = json.load(fh)
+        
         # Accept both list-of-dicts and { "items": [...] }
         if isinstance(data, list):
             return data
         if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
             return data["items"]
+        
         # Unexpected format
         st.warning(f"{path.name} exists but has unexpected JSON structure; expected a list or {{'items': [...]}}")
         return None
@@ -57,49 +194,57 @@ def load_data_file(path: Path):
         return None
 
 
-def save_data_file(path: Path, items):
+def save_data_file(items, path=DATA_FILE):
+    """Save items to a JSON file.
+    
+    For Docker compatibility, we'll use a try-except block to handle permission issues.
+    """
     try:
+        # First try to save to the specified path
         with path.open("w", encoding="utf-8") as fh:
             json.dump(items, fh, indent=2, ensure_ascii=False)
         st.success(f"Saved {len(items)} items to {path}")
+        return True
     except Exception as e:
-        st.error(f"Failed to save data to {path}: {e}")
+        st.warning(f"Could not save to {path}: {e}")
+        
+        # If the original path fails, try saving to a download file in memory
+        # that the user can download
+        return False
 
 
-# Initialize session state (try loading from data.json first)
+def restore_sample_data():
+    """Restore the sample data to the session state."""
+    # Deep copy to avoid modifying the original
+    sample_data = json.loads(json.dumps(SAMPLE_DATA))
+    
+    # Update costs for all items
+    for item in sample_data:
+        item['calculated_cost'] = calculate_cost(
+            item['success_rate'], 
+            item['efficiency'], 
+            st.session_state["cost_max_value"]
+        )
+    
+    st.session_state["items"] = sample_data
+    st.success("Sample data has been restored!")
+    
+    return sample_data
+
+
+# Initialize session state
 if "items" not in st.session_state:
-    loaded = load_data_file(DATA_FILE)
-    if loaded is not None:
-        st.session_state["items"] = loaded
-    else:
-        st.session_state["items"] = [
-            {
-                "item_name": "Power Sword",
-                "category": "Weapons",
-                "success_rate": 85.0,
-                "efficiency": 90.0,
-                "calculated_cost": 76500,  # Will be recalculated
-                "metals_alloys": 40.0,
-                "synthetic_materials": 20.0,
-                "tech_components": 30.0,
-                "energy_sources": 5.0,
-                "biomatter": 0.0,
-                "chemicals": 5.0
-            },
-            {
-                "item_name": "Healing Potion",
-                "category": "Medical Items",
-                "success_rate": 95.0,
-                "efficiency": 60.0,
-                "calculated_cost": 57000,  # Will be recalculated
-                "metals_alloys": 5.0,
-                "synthetic_materials": 10.0,
-                "tech_components": 5.0,
-                "energy_sources": 10.0,
-                "biomatter": 50.0,
-                "chemicals": 20.0
-            }
-        ]
+    # Try to load from data.json first, but don't worry if it fails
+    try:
+        loaded = load_data_file(DATA_FILE)
+        if loaded is not None:
+            st.session_state["items"] = loaded
+        else:
+            # Use sample data as fallback
+            st.session_state["items"] = json.loads(json.dumps(SAMPLE_DATA))
+    except:
+        # Use sample data as fallback
+        st.session_state["items"] = json.loads(json.dumps(SAMPLE_DATA))
 
 # Initialize max cost value if not exists
 if "cost_max_value" not in st.session_state:
@@ -241,6 +386,24 @@ with tab1:
             column_order=None,  # Show all columns
             hide_index=True
         )
+        
+                # Display resource costs table if toggle is enabled
+        if show_resource_costs:
+            st.subheader("📊 Resource Cost Breakdown")
+            resource_costs = calculate_resource_costs(filtered_items)
+            cost_df = pd.DataFrame(resource_costs)
+            
+            column_config = {
+                "item_name": st.column_config.TextColumn("Item Name"),
+                "category": st.column_config.TextColumn("Category"),
+                "calculated_cost": st.column_config.NumberColumn("Total Cost", format="%.0f"),
+                "metals_alloys_cost": st.column_config.NumberColumn("Metals & Alloys Cost", format="%.0f"),
+                "synthetic_materials_cost": st.column_config.NumberColumn("Synthetic Materials Cost", format="%.0f"),
+                "tech_components_cost": st.column_config.NumberColumn("Tech Components Cost", format="%.0f"),
+                "energy_sources_cost": st.column_config.NumberColumn("Energy Sources Cost", format="%.0f"),
+                "biomatter_cost": st.column_config.NumberColumn("Biomatter Cost", format="%.0f"),
+                "chemicals_cost": st.column_config.NumberColumn("Chemicals Cost", format="%.0f")
+            }
         
         # Display resource costs table if toggle is enabled
         if show_resource_costs:
@@ -768,6 +931,10 @@ if st.sidebar.button("Clear All Items"):
     st.session_state["items"] = []
     st.rerun()
 
+if st.sidebar.button("Restore Sample Data"):
+    restore_sample_data()
+    st.rerun()
+
 # Load / Save controls
 st.sidebar.markdown("*Local data operations (reads/writes to data.json in app folder)*")
 if st.sidebar.button("Load data.json"):
@@ -780,7 +947,7 @@ if st.sidebar.button("Load data.json"):
         st.error(f"Failed to load {DATA_FILE.name}")
 
 if st.sidebar.button("Save to data.json"):
-    save_data_file(DATA_FILE, st.session_state.get("items", []))
+    save_data_file(st.session_state.get("items", []))
 
 # Offer downloadable JSON blob as well
 st.sidebar.markdown("---")

@@ -1,0 +1,20 @@
+services:
+  item-balancing-tool:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8502:8501"
+    restart: unless-stopped
+    container_name: item-balancing-tool
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: '500M'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 10s

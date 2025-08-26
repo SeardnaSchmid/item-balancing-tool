@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtuelle Umgebungen
+venv/
+ENV/
+
+# Editor-Dateien
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker-spezifische Dateien
+Dockerfile
+docker-compose.yml
+.dockerignore
+DOCKER_README.md
+start-docker.bat
+start-docker.sh
+
+# Andere
+*.log
+.DS_Store
