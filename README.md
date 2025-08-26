@@ -9,8 +9,22 @@ This Streamlit app visualizes and balances items using Success Rate, Efficiency,
 - Resource distribution tracking and cost breakdown
 - Balance analysis with recommendations
 - Export/import item data as JSON
+- **Auto-save functionality** - Data is automatically persisted when changes are made
+- **Docker-friendly data persistence** - Works seamlessly in containerized environments
+
+## Data Persistence
+
+The application automatically saves your data when you make changes. It uses a smart fallback system:
+
+1. **Primary**: `/app/data/data.json` (in Docker containers)
+2. **Fallback**: `/tmp/item_balancing_data.json` (if primary fails)  
+3. **Last resort**: Session-based memory storage
+
+Your data will be preserved between application restarts and Docker container restarts (when using volumes).
 
 ## Getting Started
+
+### Local Development
 1. Install dependencies:
    ```bash
    pip install -r requirements.txt
@@ -19,6 +33,28 @@ This Streamlit app visualizes and balances items using Success Rate, Efficiency,
    ```bash
    streamlit run app.py
    ```
+
+### Docker (Recommended for Production)
+
+1. **Quick Start with Docker Compose:**
+   ```bash
+   # Set up data directory (optional, for persistence across container restarts)
+   ./setup_data_dir.sh
+   
+   # Build and run
+   docker-compose up --build
+   ```
+
+2. **Manual Docker Setup:**
+   ```bash
+   # Build the image
+   docker build -t item-balancing-tool .
+   
+   # Run with data persistence
+   docker run -p 8502:8501 -v $(pwd)/data:/app/data item-balancing-tool
+   ```
+
+The application will be available at `http://localhost:8502`
 
 ## Deployment Options
 

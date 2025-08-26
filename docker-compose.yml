@@ -7,6 +7,9 @@ services:
       - "8502:8501"
     restart: unless-stopped
     container_name: item-balancing-tool
+    # Optional: Mount a volume for data persistence across container restarts
+    volumes:
+      - ./data:/app/data
     deploy:
       resources:
         limits:

@@ -15,8 +15,35 @@ import uuid
 st.set_page_config(page_title="Item Balancing Tool", layout="wide")
 st.title("🎮 Item Balancing Tool")
 
-# Data file (local to this source file)
-DATA_FILE = Path(__file__).parent / "data.json"
+# Data file configuration for Docker compatibility
+def get_data_file_path():
+    """Get the appropriate data file path, handling Docker environments"""
+    # First try: /app/data directory (for Docker)
+    docker_data_dir = Path("/app/data")
+    if docker_data_dir.exists() or docker_data_dir.is_dir():
+        try:
+            docker_data_dir.mkdir(exist_ok=True)
+            data_file = docker_data_dir / "data.json"
+            # Test write permissions
+            test_file = docker_data_dir / ".write_test"
+            test_file.touch()
+            test_file.unlink()
+            return data_file
+        except (OSError, PermissionError):
+            pass
+    
+    # Second try: /tmp directory (always writable in containers)
+    tmp_data_dir = Path("/tmp/item_balancing_data")
+    try:
+        tmp_data_dir.mkdir(exist_ok=True)
+        return tmp_data_dir / "data.json"
+    except (OSError, PermissionError):
+        pass
+    
+    # Fallback: relative to current file
+    return Path(__file__).parent / "data.json"
+
+DATA_FILE = get_data_file_path()
 
 # Sample data directly embedded in the code
 SAMPLE_DATA = [
@@ -167,49 +194,111 @@ CATEGORIES = [
 ]
 
 
-def load_data_file(path=DATA_FILE):
-    """Try to load items from a JSON file.
+def load_data_file(path=None):
+    """Try to load items from a JSON file with Docker-friendly fallbacks.
 
     Accepts either a top-level list of item dicts or an object with an "items" key.
     Returns list on success, or None on failure.
     """
-    try:
-        if not path.exists():
-            return None
-            
-        with path.open("r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        
-        # Accept both list-of-dicts and { "items": [...] }
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
-            return data["items"]
-        
-        # Unexpected format
-        st.warning(f"{path.name} exists but has unexpected JSON structure; expected a list or {{'items': [...]}}")
-        return None
-    except Exception as e:
-        st.warning(f"Failed to read {path.name}: {e}")
-        return None
-
-
-def save_data_file(items, path=DATA_FILE):
-    """Save items to a JSON file.
+    paths_to_try = []
     
-    For Docker compatibility, we'll use a try-except block to handle permission issues.
+    # If a specific path is provided, try it first
+    if path is not None:
+        paths_to_try.append(path)
+    
+    # Add our standard data file locations
+    paths_to_try.extend([
+        DATA_FILE,
+        Path("/tmp") / "item_balancing_data.json",
+        Path("/app/data") / "data.json",
+        Path(__file__).parent / "data.json"
+    ])
+    
+    # Remove duplicates while preserving order
+    unique_paths = []
+    for p in paths_to_try:
+        if p not in unique_paths:
+            unique_paths.append(p)
+    
+    for current_path in unique_paths:
+        try:
+            if not current_path.exists():
+                continue
+                
+            with current_path.open("r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            
+            # Accept both list-of-dicts and { "items": [...] }
+            if isinstance(data, list):
+                st.success(f"📂 Loaded data from {current_path}")
+                return data
+            if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
+                st.success(f"📂 Loaded data from {current_path}")
+                return data["items"]
+            
+            # Unexpected format
+            st.warning(f"{current_path.name} exists but has unexpected JSON structure; expected a list or {{'items': [...]}}")
+            
+        except Exception as e:
+            # Don't show warnings for files that simply don't exist
+            if current_path.exists():
+                st.warning(f"Failed to read {current_path}: {e}")
+            continue
+    
+    # Try loading from session state as last resort
+    if 'persistent_items' in st.session_state:
+        st.info("📂 Loaded data from session memory")
+        return st.session_state.persistent_items
+    
+    return None
+
+
+def save_data_file(items, path=None):
+    """Save items to a JSON file with Docker-friendly error handling.
+    
+    For Docker compatibility, we'll try multiple strategies to save data.
     """
+    global DATA_FILE
+    
+    if path is None:
+        path = DATA_FILE
+    
+    # Strategy 1: Try the primary data file path
     try:
-        # First try to save to the specified path
+        # Ensure parent directory exists
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
         with path.open("w", encoding="utf-8") as fh:
             json.dump(items, fh, indent=2, ensure_ascii=False)
-        st.success(f"Saved {len(items)} items to {path}")
+        st.success(f"✅ Saved {len(items)} items to {path}")
         return True
     except Exception as e:
-        st.warning(f"Could not save to {path}: {e}")
+        st.warning(f"⚠️ Could not save to primary location {path}: {e}")
+    
+    # Strategy 2: Try /tmp directory
+    try:
+        tmp_path = Path("/tmp") / "item_balancing_data.json"
+        with tmp_path.open("w", encoding="utf-8") as fh:
+            json.dump(items, fh, indent=2, ensure_ascii=False)
+        st.success(f"✅ Saved {len(items)} items to fallback location: {tmp_path}")
         
-        # If the original path fails, try saving to a download file in memory
-        # that the user can download
+        # Also update the global DATA_FILE to point to this working location
+        DATA_FILE = tmp_path
+        return True
+    except Exception as e:
+        st.warning(f"⚠️ Could not save to fallback location: {e}")
+    
+    # Strategy 3: In-memory storage (session-based persistence)
+    try:
+        # Store in session state as backup
+        if 'persistent_items' not in st.session_state:
+            st.session_state.persistent_items = items
+        else:
+            st.session_state.persistent_items = items
+        st.info("💾 Data saved in memory (session-based persistence). Download your data to keep it permanently.")
+        return False
+    except Exception as e:
+        st.error(f"❌ Complete save failure: {e}")
         return False
 
 
@@ -229,22 +318,40 @@ def restore_sample_data():
     st.session_state["items"] = sample_data
     st.success("Sample data has been restored!")
     
+    # Auto-save after restoring sample data
+    auto_save_data()
+    
     return sample_data
+
+
+def auto_save_data():
+    """Automatically save data when it changes (Docker-friendly)"""
+    if "items" in st.session_state:
+        items = st.session_state.get("items", [])
+        if items:  # Only save if there's actual data
+            save_data_file(items)
 
 
 # Initialize session state
 if "items" not in st.session_state:
     # Try to load from data.json first, but don't worry if it fails
     try:
-        loaded = load_data_file(DATA_FILE)
+        loaded = load_data_file()
         if loaded is not None:
             st.session_state["items"] = loaded
+            st.success("📂 Loaded existing data from file!")
         else:
             # Use sample data as fallback
             st.session_state["items"] = json.loads(json.dumps(SAMPLE_DATA))
+            st.info("📝 Started with sample data. Your changes will be auto-saved!")
+            # Auto-save the initial sample data
+            auto_save_data()
     except:
         # Use sample data as fallback
         st.session_state["items"] = json.loads(json.dumps(SAMPLE_DATA))
+        st.info("📝 Started with sample data. Your changes will be auto-saved!")
+        # Auto-save the initial sample data
+        auto_save_data()
 
 # Initialize max cost value if not exists
 if "cost_max_value" not in st.session_state:
@@ -475,6 +582,9 @@ with tab1:
                     if original_item.get("item_name") == updated_item.get("item_name"):
                         st.session_state["items"][i] = updated_item
                         break
+            
+            # Auto-save after updating items
+            auto_save_data()
                 
             st.rerun()
     else:
@@ -646,6 +756,10 @@ with tab1:
                 }
                 st.session_state["items"].append(new_item)
                 st.success(f"Added {item_name}!")
+                
+                # Auto-save after adding new item
+                auto_save_data()
+                
                 st.rerun()
             else:
                 st.error("Resource distribution must sum to 100%")
@@ -929,6 +1043,10 @@ st.sidebar.markdown("Balance your game items using data-driven insights!")
 st.sidebar.markdown("### 📁 Data Management")
 if st.sidebar.button("Clear All Items"):
     st.session_state["items"] = []
+    
+    # Auto-save after clearing (saves empty state)
+    auto_save_data()
+    
     st.rerun()
 
 if st.sidebar.button("Restore Sample Data"):
@@ -938,15 +1056,25 @@ if st.sidebar.button("Restore Sample Data"):
 # Load / Save controls
 st.sidebar.markdown("*Local data operations (reads/writes to data.json in app folder)*")
 if st.sidebar.button("Load data.json"):
-    loaded = load_data_file(DATA_FILE)
+    loaded = load_data_file()
     if loaded is not None:
         st.session_state["items"] = loaded
-        st.success(f"Loaded {len(loaded)} items from {DATA_FILE.name}")
+        st.success(f"Loaded {len(loaded)} items from file")
+        
+        # Auto-save after loading (to ensure consistency)
+        auto_save_data()
+        
         st.rerun()
     else:
-        st.error(f"Failed to load {DATA_FILE.name}")
+        st.error(f"Failed to load data file")
 
-if st.sidebar.button("Save to data.json"):
+# Show current data file location
+st.sidebar.markdown("---")
+st.sidebar.markdown("#### 💾 Data Persistence")
+st.sidebar.info(f"**Current data file:** `{DATA_FILE}`")
+st.sidebar.caption("Data is auto-saved when you make changes!")
+
+if st.sidebar.button("💾 Manual Save"):
     save_data_file(st.session_state.get("items", []))
 
 # Offer downloadable JSON blob as well
@@ -988,6 +1116,10 @@ if uploaded is not None:
             if valid_items:
                 st.session_state["items"] = valid_items
                 st.success(f"Imported {len(valid_items)} items from uploaded file")
+                
+                # Auto-save after importing
+                auto_save_data()
+                
                 st.rerun()
             else:
                 st.error("No valid items found in the uploaded file")

@@ -19,6 +19,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Anwendungsdateien kopieren
 COPY . .
 
+# Create a writable data directory for persistent storage
+RUN mkdir -p /app/data && chmod 755 /app/data
+
+# Ensure the app can write to its own directory
+RUN chmod 755 /app
+
 # Port freigeben
 EXPOSE 8501
 
