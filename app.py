@@ -17,11 +17,11 @@ st.title("🎮 Item Balancing Tool")
 
 # Data file configuration for Docker compatibility
 def get_data_file_path():
-    """Get the appropriate data file path, handling Docker environments"""
+    """Get the appropriate data file path, handling Docker environments and Streamlit Cloud"""
     # First try: /app/data directory (for Docker)
     docker_data_dir = Path("/app/data")
-    if docker_data_dir.exists() or docker_data_dir.is_dir():
-        try:
+    try:
+        if docker_data_dir.exists() and docker_data_dir.is_dir():
             docker_data_dir.mkdir(exist_ok=True)
             data_file = docker_data_dir / "data.json"
             # Test write permissions
@@ -29,14 +29,22 @@ def get_data_file_path():
             test_file.touch()
             test_file.unlink()
             return data_file
-        except (OSError, PermissionError):
-            pass
+    except (OSError, PermissionError):
+        pass
     
     # Second try: /tmp directory (always writable in containers)
     tmp_data_dir = Path("/tmp/item_balancing_data")
     try:
         tmp_data_dir.mkdir(exist_ok=True)
         return tmp_data_dir / "data.json"
+    except (OSError, PermissionError):
+        pass
+    
+    # Third try: User's home directory (for Streamlit Cloud)
+    try:
+        home_data_dir = Path.home() / ".item_balancing_tool"
+        home_data_dir.mkdir(exist_ok=True)
+        return home_data_dir / "data.json"
     except (OSError, PermissionError):
         pass
     
@@ -211,6 +219,7 @@ def load_data_file(path=None):
         DATA_FILE,
         Path("/tmp") / "item_balancing_data.json",
         Path("/app/data") / "data.json",
+        Path.home() / ".item_balancing_tool" / "data.json",
         Path(__file__).parent / "data.json"
     ])
     
